@@ -90,9 +90,9 @@ class WaybillCreate(BaseModel):
     pharma_enterprise_id: Optional[int] = None
     carrier_enterprise_id: Optional[int] = None
     vehicle_id: Optional[int] = None
-    temp_min: float = 2.0
-    temp_max: float = 8.0
-    consecutive_exceed_limit_min: int = 5
+    temp_min: Optional[float] = None
+    temp_max: Optional[float] = None
+    consecutive_exceed_limit_min: Optional[int] = None
     sampling_interval_sec: int = 60
 
 
@@ -222,6 +222,10 @@ class ClaimCreate(BaseModel):
     alert_id: Optional[int] = None
     amount: float = 0
     reason: Optional[str] = None
+
+
+class ClaimClose(BaseModel):
+    remark: Optional[str] = None
 
 
 class ClaimReview(BaseModel):

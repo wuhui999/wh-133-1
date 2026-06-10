@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 from app.database import get_db
 from app.models import User, Claim, ClaimStatus, UserRole
-from app.schemas import ClaimCreate, ClaimOut, ClaimReview
+from app.schemas import ClaimCreate, ClaimOut, ClaimReview, ClaimClose
 from app.dependencies import get_current_user, require_role
 from app.services.audit import write_audit_log
 
@@ -72,4 +72,20 @@ def review_claim(claim_id: int, body: ClaimReview, db: Session = Depends(get_db)
 
     write_audit_log(db, user_id=current_user.id, action="review_claim", target_type="claim", target_id=claim.id,
                     detail=f"Claim {claim.claim_no} reviewed: status={body.status.value}")
+    return claim
+
+
+@router.post("/{claim_id}/close", response_model=ClaimOut)
+def close_claim(claim_id: int, body: ClaimClose, db: Session = Depends(get_db), current_user: User = Depends(require_role(UserRole.supervisor.value, UserRole.pharma.value))):
+    claim = db.query(Claim).filter(Claim.id == claim_id).first()
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if claim.status not in [ClaimStatus.approved.value, ClaimStatus.rejected.value]:
+        raise HTTPException(status_code=400, detail=f"Cannot close claim in status {claim.status}, only approved or rejected can be closed")
+    claim.status = ClaimStatus.closed.value
+    claim.review_remark = (claim.review_remark or "") + (" | CLOSE: " + body.remark if body.remark else " | CLOSE")
+    db.commit()
+    db.refresh(claim)
+    write_audit_log(db, user_id=current_user.id, action="close_claim", target_type="claim", target_id=claim.id,
+                    detail=f"Claim {claim.claim_no} closed{(' - ' + body.remark) if body.remark else ''}")
     return claim

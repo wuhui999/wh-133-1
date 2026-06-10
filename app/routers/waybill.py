@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import User, Waybill, Probe, Vehicle, WaybillStatus, UserRole
+from app.models import User, Waybill, Probe, Vehicle, WaybillStatus, UserRole, DrugType
 from app.schemas import (
     WaybillCreate, WaybillOut, WaybillStatusUpdate, ProbeCreate, ProbeOut,
     ProbeBind, VehicleCreate, VehicleOut,
@@ -10,6 +10,14 @@ from app.dependencies import get_current_user, require_role
 from app.services.audit import write_audit_log
 
 router = APIRouter(prefix="/api/waybills", tags=["waybills"])
+
+DRUG_TEMP_DEFAULTS = {
+    DrugType.vaccine.value: {"temp_min": 2.0, "temp_max": 8.0, "consecutive_exceed_limit_min": 5},
+    DrugType.insulin.value: {"temp_min": 2.0, "temp_max": 8.0, "consecutive_exceed_limit_min": 10},
+    DrugType.biologic.value: {"temp_min": -25.0, "temp_max": -15.0, "consecutive_exceed_limit_min": 3},
+    DrugType.blood_product.value: {"temp_min": 2.0, "temp_max": 6.0, "consecutive_exceed_limit_min": 5},
+    DrugType.other.value: {"temp_min": 2.0, "temp_max": 8.0, "consecutive_exceed_limit_min": 5},
+}
 
 
 @router.post("/vehicles", response_model=VehicleOut)
@@ -42,6 +50,10 @@ def list_probes(db: Session = Depends(get_db)):
 
 @router.post("", response_model=WaybillOut)
 def create_waybill(body: WaybillCreate, db: Session = Depends(get_db), current_user: User = Depends(require_role(UserRole.pharma.value))):
+    defaults = DRUG_TEMP_DEFAULTS.get(body.drug_type.value, DRUG_TEMP_DEFAULTS[DrugType.other.value])
+    temp_min = body.temp_min if body.temp_min is not None else defaults["temp_min"]
+    temp_max = body.temp_max if body.temp_max is not None else defaults["temp_max"]
+    consecutive_limit = body.consecutive_exceed_limit_min if body.consecutive_exceed_limit_min is not None else defaults["consecutive_exceed_limit_min"]
     wb = Waybill(
         waybill_no=body.waybill_no,
         status=WaybillStatus.draft.value,
@@ -51,16 +63,16 @@ def create_waybill(body: WaybillCreate, db: Session = Depends(get_db), current_u
         pharma_enterprise_id=body.pharma_enterprise_id or current_user.enterprise_id,
         carrier_enterprise_id=body.carrier_enterprise_id,
         vehicle_id=body.vehicle_id,
-        temp_min=body.temp_min,
-        temp_max=body.temp_max,
-        consecutive_exceed_limit_min=body.consecutive_exceed_limit_min,
+        temp_min=temp_min,
+        temp_max=temp_max,
+        consecutive_exceed_limit_min=consecutive_limit,
         sampling_interval_sec=body.sampling_interval_sec,
     )
     db.add(wb)
     db.commit()
     db.refresh(wb)
     write_audit_log(db, user_id=current_user.id, action="create_waybill", target_type="waybill", target_id=wb.id,
-                    detail=f"Created waybill {wb.waybill_no}")
+                    detail=f"Created waybill {wb.waybill_no}, drug_type={wb.drug_type}, temp_range=[{wb.temp_min},{wb.temp_max}], exceed_limit={wb.consecutive_exceed_limit_min}min")
     return wb
 
 

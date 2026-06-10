@@ -134,9 +134,13 @@ pp("24. 审核索赔(通过)", s.post(f"{BASE}/api/claims/1/review", json={
     "remark": "温度超标事实确认，承运商负主要责任",
 }))
 
-pp("25. 查询索赔详情", s.get(f"{BASE}/api/claims/1"))
+pp("25. 结案索赔", s.post(f"{BASE}/api/claims/1/close", json={
+    "remark": "承运商已赔付，索赔结案",
+}))
 
-pp("26. 查询审计日志", s.get(f"{BASE}/api/audit-logs"))
+pp("26. 查询索赔详情", s.get(f"{BASE}/api/claims/1"))
+
+pp("27. 查询审计日志", s.get(f"{BASE}/api/audit-logs"))
 
 gap_samples = [
     {"waybill_id": 1, "probe_id": 2, "temperature": 4.0,
@@ -147,7 +151,39 @@ gap_samples = [
      "sampled_at": (now - timedelta(hours=1)).isoformat()},
 ]
 s.headers.update({"Authorization": f"Bearer {token}"})
-pp("27. 写入带间隔的采样(检测断点)", s.post(f"{BASE}/api/temperature/samples", json={"samples": gap_samples}))
-pp("28. 检测采样断点", s.get(f"{BASE}/api/temperature/breakpoints/1/2"))
+pp("28. 写入带间隔的采样(检测断点)", s.post(f"{BASE}/api/temperature/samples", json={"samples": gap_samples}))
+pp("29. 检测采样断点", s.get(f"{BASE}/api/temperature/breakpoints/1/2"))
+
+pp("30. 创建运单-胰岛素(不传温控参数，用默认值)", s.post(f"{BASE}/api/waybills", json={
+    "waybill_no": "WB-INSULIN-001",
+    "drug_name": "诺和灵R",
+    "drug_type": "insulin",
+    "quantity": 500,
+    "pharma_enterprise_id": 1,
+    "carrier_enterprise_id": 2,
+}))
+
+pp("31. 创建运单-生物制品(不传温控参数，用默认值)", s.post(f"{BASE}/api/waybills", json={
+    "waybill_no": "WB-BIO-001",
+    "drug_name": "单克隆抗体",
+    "drug_type": "biologic",
+    "quantity": 200,
+    "pharma_enterprise_id": 1,
+    "carrier_enterprise_id": 2,
+}))
+
+pp("32. 创建运单-疫苗(显式传参覆盖默认值)", s.post(f"{BASE}/api/waybills", json={
+    "waybill_no": "WB-VAC-OVERRIDE-001",
+    "drug_name": "HPV疫苗",
+    "drug_type": "vaccine",
+    "quantity": 300,
+    "pharma_enterprise_id": 1,
+    "carrier_enterprise_id": 2,
+    "temp_min": 0.0,
+    "temp_max": 5.0,
+    "consecutive_exceed_limit_min": 3,
+}))
+
+pp("33. 验证运单列表(查看温控参数)", s.get(f"{BASE}/api/waybills"))
 
 print("\n\n========== 全部示例请求执行完毕 ==========")
